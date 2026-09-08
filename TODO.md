@@ -1,0 +1,70 @@
+# MailTracer.ai Implementation Checklist
+
+Track progress across all 32 development phases:
+
+- [x] **Phase 0: Repository Setup**
+  - Git initialized, `.gitignore` configured to protect secrets, `.env.example` defined.
+- [x] **Phase 1: Next.js Foundation**
+  - Next.js 16 App Router, TypeScript 5, Tailwind CSS v4, Lucide icons, dark SOC theme.
+- [x] **Phase 2: Database & Relational Models**
+  - 26 Prisma models configured in `prisma/schema.prisma`. SQLite initialized in `dev.db`.
+- [x] **Phase 3: Authentication & RBAC**
+  - Role-based permissions (ADMIN, ANALYST, INVESTIGATOR, VIEWER) and audit logging.
+- [x] **Phase 4: Email Upload**
+  - Raw paste & file upload pipeline with drag-and-drop support.
+- [x] **Phase 5: Email Parsing**
+  - RFC5322 & MIME body/header extraction, header unfolding, and evidence hashing.
+- [x] **Phase 6: Header Forensics**
+  - Chronological `Received` hop analysis and MTA anomaly detection.
+- [x] **Phase 7: SPF / DKIM / DMARC**
+  - Real DNS SPF TXT query, DKIM selector parsing, and RFC 7489 DMARC alignment.
+- [x] **Phase 8: URL Verification**
+  - URL extraction, normalization, and lookalike detection.
+- [x] **Phase 9: Website Verification**
+  - Safe HTTP scanner, TLS handshake inspection, credential form detection, and HTTP security headers.
+- [x] **Phase 10: Domain Intelligence**
+  - DNS interrogation (A, MX, TXT, NS) and typosquatting/lookalike brand imitation detection.
+- [x] **Phase 11: IP Intelligence**
+  - Reverse DNS, ASN routing, infrastructure geolocation, and mandatory attribution disclaimer.
+- [x] **Phase 12: Attachment Analysis**
+  - SHA256, SHA1, MD5 extraction, macro detection, and malicious signature checks.
+- [x] **Phase 13: Threat Intelligence Adapters**
+  - Clean `ThreatIntelProvider` interface with VirusTotal and AbuseIPDB adapters + TTL cache.
+- [x] **Phase 14: AI Intent Classification**
+  - Prompt injection quarantine and intent categorization (Phishing, BEC, Malware, Benign).
+- [x] **Phase 15: AI Evidence Grounding**
+  - Zero hallucination policy: Copilot cites verified case evidence or returns "Insufficient evidence."
+- [x] **Phase 16: ML Training Pipeline**
+  - Offline dataset docs, preprocessing/PII redaction, feature extraction, and evaluation metrics in `ml/`.
+- [x] **Phase 17: Explainable Threat Scoring**
+  - Deterministic 0-100 score, 6-level verdict, confidence %, and itemized points breakdown.
+- [x] **Phase 18: Threat DNA**
+  - Composite `MT-DNA-XXXXXXXX` fingerprint synthesis and similarity matching.
+- [x] **Phase 19: Campaign Detection**
+  - Correlated attack clusters by shared Threat DNA, ASN, and payload hashes.
+- [x] **Phase 20: Cytoscape.js Attack Graph**
+  - Interactive visual entity graph with zoom, pan, reset, and node details inspector.
+- [x] **Phase 21: Timeline**
+  - Chronological forensic event and transmission hop visualizer.
+- [x] **Phase 22: Attack Story**
+  - 5-point narrative incident breakdown and recommended defensive actions.
+- [x] **Phase 23: Investigator Copilot**
+  - Evidence-grounded chat assistant with suggested forensic questions and citations.
+- [x] **Phase 24: Case Management**
+  - Full CRUD, priority filters, analyst status updates, and feedback loop.
+- [x] **Phase 25: Reports**
+  - Print and JSON audit-ready incident dossier export.
+- [x] **Phase 26: Frontend SOC Interface**
+  - Responsive dark SOC theme, radar sweep animation, Verification Hub, and 10-tab case workspace.
+- [x] **Phase 27: Testing**
+  - Vitest test suite for email parsing, SSRF filters, authentication, threat scoring, and Threat DNA.
+- [x] **Phase 28: Security Controls**
+  - Strict SSRF protection (loopback, RFC1918, cloud metadata blocked) and prompt injection quarantine.
+- [x] **Phase 29: Performance Optimization**
+  - Serverless-compatible payloads, response size limits (512KB cap), and in-memory TTL caching.
+- [x] **Phase 30: Vercel Deployment**
+  - Documented deployment guide with Neon PostgreSQL compatibility.
+- [x] **Phase 31: GitHub Repository**
+  - Initialized repository, clean commit, and remote push configured.
+- [x] **Phase 32: SIH Demonstration**
+  - 4 pre-configured synthetic cases (Phishing, BEC, Malware, Benign) for one-click grading and demo.

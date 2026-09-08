@@ -1,0 +1,193 @@
+[
+  {
+    "caseNumber": "MT-CASE-2026-001",
+    "title": "Credential Harvesting Attack impersonating Microsoft 365 Security",
+    "description": "Urgent account suspension notice directing user to a lookalike portal with credential login form.",
+    "status": "INVESTIGATING",
+    "priority": "CRITICAL",
+    "isDemo": true,
+    "tags": ["DEMO / SYNTHETIC DATA", "Credential Phishing", "Lookalike Domain", "DMARC Failure"],
+    "verdict": "MALICIOUS",
+    "threatScore": 92,
+    "confidence": 96,
+    "threatDna": "MT-DNA-8F3A91C2",
+    "campaign": "Operation Credential Harvest 365",
+    "email": {
+      "subject": "URGENT: Microsoft 365 Password Expiration Notice - Immediate Action Required",
+      "fromAddress": "security-noreply@microsoft-verify-portal.net",
+      "fromName": "Microsoft 365 Security Team",
+      "toAddress": "target.executive@enterprise-victim.com",
+      "replyTo": "harvest-collector@anonymous-redirect.su",
+      "returnPath": "bounces@microsoft-verify-portal.net",
+      "bodyText": "Dear Valued User,\n\nYour Microsoft 365 enterprise account access is scheduled to be suspended within 12 hours due to an expired security token. To avoid loss of access to your emails and cloud documents, you must verify your identity immediately.\n\nVerify Account Now: https://login.microsoft-verify-portal.net/auth/verify?id=99281\n\nFailure to verify will result in immediate mailbox deactivation.\n\nMicrosoft Security Center",
+      "authResults": {
+        "spf": { "status": "FAIL", "domain": "microsoft-verify-portal.net", "aligned": false, "details": "Sender IP not in SPF authorized record" },
+        "dkim": { "status": "FAIL", "domain": "microsoft-verify-portal.net", "aligned": false, "details": "DKIM signature failed validation" },
+        "dmarc": { "status": "FAIL", "domain": "microsoft-verify-portal.net", "aligned": false, "details": "DMARC policy failed: p=reject" }
+      },
+      "urls": [
+        {
+          "url": "https://login.microsoft-verify-portal.net/auth/verify?id=99281",
+          "domain": "microsoft-verify-portal.net",
+          "isLookalike": true,
+          "hasCredForm": true,
+          "reputation": "MALICIOUS"
+        }
+      ],
+      "ip": "185.220.101.44",
+      "asn": "AS200651",
+      "country": "Germany",
+      "attachments": [],
+      "reasons": [
+        { "reason": "DMARC authentication failed with strict policy", "points": 20, "category": "AUTH" },
+        { "reason": "Known malicious phishing URL identified", "points": 25, "category": "URL" },
+        { "reason": "Lookalike typosquatted domain 'microsoft-verify-portal.net'", "points": 20, "category": "DOMAIN" },
+        { "reason": "Website contains active password credential harvesting form", "points": 20, "category": "URL" },
+        { "reason": "Sender address domain diverts responses to untrusted Reply-To", "points": 15, "category": "AUTH" }
+      ]
+    }
+  },
+  {
+    "caseNumber": "MT-CASE-2026-002",
+    "title": "Executive Impersonation / Urgent Wire Transfer BEC",
+    "description": "Spoofed CEO email directing finance director to execute an urgent offshore vendor payment.",
+    "status": "OPEN",
+    "priority": "HIGH",
+    "isDemo": true,
+    "tags": ["DEMO / SYNTHETIC DATA", "BEC", "Wire Fraud", "Executive Impersonation"],
+    "verdict": "HIGH_RISK",
+    "threatScore": 82,
+    "confidence": 91,
+    "threatDna": "MT-DNA-4B19C0E7",
+    "campaign": "FinFraud Global Syndicate",
+    "email": {
+      "subject": "Urgent: Revised Wire Instructions for Q3 Strategic Vendor Acquisition",
+      "fromAddress": "david.ceo@enterprise-victim.com",
+      "fromName": "David Sterling - Chief Executive Officer",
+      "toAddress": "sarah.cfo@enterprise-victim.com",
+      "replyTo": "david.sterling.confidential@gmail-secure-relay.com",
+      "bodyText": "Sarah,\n\nI am currently in an all-day board meeting with restricted mobile connectivity. We need to immediately settle the closing invoice for the pending acquisition before market close today ($142,500).\n\nPlease wire the funds immediately using the attached updated banking coordinates. Treat this matter with strict confidentiality until our official press release tomorrow.\n\nThanks,\nDavid Sterling\nCEO",
+      "authResults": {
+        "spf": { "status": "SOFTFAIL", "domain": "enterprise-victim.com", "aligned": false, "details": "Sent through unauthorized external mail server" },
+        "dkim": { "status": "NONE", "domain": null, "aligned": false, "details": "No DKIM signature present" },
+        "dmarc": { "status": "FAIL", "domain": "enterprise-victim.com", "aligned": false, "details": "DMARC authentication failed due to SPF/DKIM non-alignment" }
+      },
+      "urls": [],
+      "attachments": [
+        {
+          "filename": "Revised_Acquisition_Wire_Instructions.pdf",
+          "contentType": "application/pdf",
+          "sizeBytes": 48120,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "md5": "d41d8cd98f00b204e9800998ecf8427e",
+          "sha1": "da39a3ee5e6b4b0d3255bfef95601890afd80709",
+          "isMalicious": false
+        }
+      ],
+      "ip": "104.244.76.13",
+      "asn": "AS53667",
+      "country": "Luxembourg",
+      "reasons": [
+        { "reason": "DMARC authentication failed for purported internal CEO sender", "points": 20, "category": "AUTH" },
+        { "reason": "Critical Reply-To diversion to external webmail address", "points": 15, "category": "AUTH" },
+        { "reason": "AI intent classifier flagged Business Email Compromise / wire fraud cues", "points": 20, "category": "CONTENT" },
+        { "reason": "Urgency coercion and secrecy instructions used to bypass financial review", "points": 15, "category": "CONTENT" },
+        { "reason": "Sent from unauthorized offshore hosting infrastructure", "points": 12, "category": "INFRA" }
+      ]
+    }
+  },
+  {
+    "caseNumber": "MT-CASE-2026-003",
+    "title": "Trojan Dropper Malicious Invoice Attachment Campaign",
+    "description": "Phishing lure containing an obfuscated macro weaponized spreadsheet delivering AgentTesla loader.",
+    "status": "CONTAINED",
+    "priority": "CRITICAL",
+    "isDemo": true,
+    "tags": ["DEMO / SYNTHETIC DATA", "Malware Delivery", "Macro Dropper", "Known Malicious Hash"],
+    "verdict": "MALICIOUS",
+    "threatScore": 98,
+    "confidence": 99,
+    "threatDna": "MT-DNA-119E5A33",
+    "campaign": "AgentTesla Distribution Cluster",
+    "email": {
+      "subject": "Overdue Remittance Advice & Statement - Overpayment Ref #INV-88391",
+      "fromAddress": "billing@global-logistics-freight.com",
+      "fromName": "Accounts Receivable Dept",
+      "toAddress": "accounting@enterprise-victim.com",
+      "replyTo": "billing@global-logistics-freight.com",
+      "bodyText": "Dear Customer,\n\nPlease find attached the remittance advice detailing an unapplied credit balance of $18,400. To receive the refund credit directly into your operating account, please verify the line items in the attached workbook.\n\nBest Regards,\nAccounts Settlement Operations",
+      "authResults": {
+        "spf": { "status": "PASS", "domain": "global-logistics-freight.com", "aligned": true, "details": "SPF valid" },
+        "dkim": { "status": "PASS", "domain": "global-logistics-freight.com", "aligned": true, "details": "DKIM signature validated" },
+        "dmarc": { "status": "PASS", "domain": "global-logistics-freight.com", "aligned": true, "details": "DMARC passed (Compromised legitimate mailbox)" }
+      },
+      "urls": [],
+      "attachments": [
+        {
+          "filename": "Remittance_Summary_INV88391.xlsm",
+          "contentType": "application/vnd.ms-excel.sheet.macroEnabled.12",
+          "sizeBytes": 124500,
+          "sha256": "7f83b1657ff1fc53b92dc18148a1d65dfc2d4b1fa3d677284addd200126d9069",
+          "md5": "3b712de48137572fc7937c73d289be33",
+          "sha1": "2aae6c35c94fcfb415dbe95f408b9ce91ee846ed",
+          "isMalicious": true,
+          "malwareType": "Trojan.AgentTesla.Dropper"
+        }
+      ],
+      "ip": "45.33.32.156",
+      "asn": "AS63949",
+      "country": "United States",
+      "reasons": [
+        { "reason": "Attachment SHA256 matches known Trojan.AgentTesla malware signature", "points": 35, "category": "ATTACHMENT" },
+        { "reason": "Dangerous macro-enabled weaponized workbook format (.xlsm)", "points": 20, "category": "ATTACHMENT" },
+        { "reason": "Correlated with active ongoing AgentTesla distribution campaign", "points": 15, "category": "INTEL" },
+        { "reason": "AI model flagged malware delivery lure pattern", "points": 25, "category": "CONTENT" }
+      ]
+    }
+  },
+  {
+    "caseNumber": "MT-CASE-2026-004",
+    "title": "Legitimate Corporate Enterprise Newsletter & Tech Digest",
+    "description": "Benign weekly developer digest with verified DKIM, SPF, and DMARC alignment from trusted sender.",
+    "status": "RESOLVED",
+    "priority": "LOW",
+    "isDemo": true,
+    "tags": ["DEMO / SYNTHETIC DATA", "Benign", "Verified Sender", "Clean Reputation"],
+    "verdict": "TRUSTED",
+    "threatScore": 8,
+    "confidence": 98,
+    "threatDna": "MT-DNA-F0123AA9",
+    "campaign": null,
+    "email": {
+      "subject": "Cloud Security Weekly #142: Zero Trust Architecture Patterns",
+      "fromAddress": "digest@cloudsecweekly.io",
+      "fromName": "Cloud Security Weekly",
+      "toAddress": "analyst@enterprise-victim.com",
+      "replyTo": "contact@cloudsecweekly.io",
+      "bodyText": "Welcome to this week's edition of Cloud Security Weekly!\n\nIn this issue:\n- Deep dive into automated zero trust identity federation\n- Top 10 cloud security misconfigurations observed in 2026\n- New open source threat modeling tools\n\nRead the full issue on our publication: https://cloudsecweekly.io/issues/142\n\nYou are receiving this because you subscribed to our newsletter.\nManage preferences: https://cloudsecweekly.io/unsubscribe",
+      "authResults": {
+        "spf": { "status": "PASS", "domain": "cloudsecweekly.io", "aligned": true, "details": "Authorized mail provider IP" },
+        "dkim": { "status": "PASS", "domain": "cloudsecweekly.io", "aligned": true, "details": "Valid 2048-bit RSA DKIM signature" },
+        "dmarc": { "status": "PASS", "domain": "cloudsecweekly.io", "aligned": true, "details": "DMARC policy active and fully aligned" }
+      },
+      "urls": [
+        {
+          "url": "https://cloudsecweekly.io/issues/142",
+          "domain": "cloudsecweekly.io",
+          "isLookalike": false,
+          "hasCredForm": false,
+          "reputation": "SAFE"
+        }
+      ],
+      "attachments": [],
+      "ip": "198.51.100.22",
+      "asn": "AS15169",
+      "country": "United States",
+      "reasons": [
+        { "reason": "DMARC authentication passed and aligned", "points": -10, "category": "AUTH" },
+        { "reason": "Cryptographic 2048-bit DKIM signature verified", "points": -5, "category": "AUTH" },
+        { "reason": "Clean domain reputation with multi-year continuous registration", "points": -5, "category": "DOMAIN" }
+      ]
+    }
+  }
+]

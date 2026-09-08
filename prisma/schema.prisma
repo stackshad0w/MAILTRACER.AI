@@ -1,0 +1,434 @@
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String    @unique
+  role          String    @default("ANALYST") // ADMIN, ANALYST, INVESTIGATOR, VIEWER
+  avatarUrl     String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  cases         Case[]
+  auditLogs     AuditLog[]
+}
+
+model Case {
+  id             String        @id @default(cuid())
+  caseNumber     String        @unique // e.g. MT-CASE-2026-001
+  title          String
+  description    String?
+  status         String        @default("OPEN") // OPEN, INVESTIGATING, CONTAINED, RESOLVED, FALSE_POSITIVE, CLOSED
+  priority       String        @default("MEDIUM") // LOW, MEDIUM, HIGH, CRITICAL
+  tags           String?       // JSON array of strings
+  assignedToId   String?
+  assignedTo     User?         @relation(fields: [assignedToId], references: [id])
+  isDemo         Boolean       @default(false)
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  emails         Email[]
+  websiteScans   WebsiteScan[]
+  threatScores   ThreatScore[]
+  threatDNAs     ThreatDNA[]
+  graphNodes     GraphNode[]
+  graphEdges     GraphEdge[]
+  timelineEvents TimelineEvent[]
+  evidences      Evidence[]
+  copilotConvs   CopilotConversation[]
+  reports        Report[]
+  auditLogs      AuditLog[]
+}
+
+model Email {
+  id              String         @id @default(cuid())
+  caseId          String
+  case            Case           @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  messageId       String?
+  subject         String
+  fromAddress     String
+  fromName        String?
+  toAddress       String
+  replyTo         String?
+  returnPath      String?
+  dateSent        DateTime?
+  bodyText        String?
+  bodyHtml        String?
+  rawHeaders      String?        // Full raw RFC5322 headers
+  rawEmlUrl       String?        // Path or blob storage URL
+  evidenceHashSha256 String?     // SHA256 of original raw email
+  evidenceHashMd5 String?
+  isSuspicious    Boolean        @default(false)
+  createdAt       DateTime       @default(now())
+
+  headers         EmailHeader[]
+  authResults     AuthenticationResult[]
+  urls            URL[]
+  attachments     Attachment[]
+  aiAnalyses      AIAnalysis[]
+  threatDNAs      ThreatDNA[]
+}
+
+model EmailHeader {
+  id          String   @id @default(cuid())
+  emailId     String
+  email       Email    @relation(fields: [emailId], references: [id], onDelete: Cascade)
+  hopIndex    Int      @default(0) // 0 is origin hop, higher is later hop
+  name        String
+  value       String
+  hopFrom     String?
+  hopBy       String?
+  hopWith     String?
+  hopDate     DateTime?
+  ipAddress   String?
+  isAnomalous Boolean  @default(false)
+  notes       String?
+}
+
+model AuthenticationResult {
+  id          String   @id @default(cuid())
+  emailId     String
+  email       Email    @relation(fields: [emailId], references: [id], onDelete: Cascade)
+  mechanism   String   // SPF, DKIM, DMARC, ARC
+  status      String   // PASS, FAIL, SOFTFAIL, NEUTRAL, NONE, TEMPERROR, PERMERROR
+  domain      String?
+  aligned     Boolean  @default(false)
+  details     String?  // Policy reason, selector, alignment mismatch notes
+  rawRecord   String?  // TXT record retrieved
+  createdAt   DateTime @default(now())
+}
+
+model URL {
+  id             String         @id @default(cuid())
+  emailId        String?
+  email          Email?         @relation(fields: [emailId], references: [id], onDelete: SetNull)
+  url            String
+  domain         String
+  path           String?
+  isShortened    Boolean        @default(false)
+  isLookalike    Boolean        @default(false)
+  hasCredForm    Boolean        @default(false)
+  reputation     String         @default("UNKNOWN") // SAFE, SUSPICIOUS, MALICIOUS, UNKNOWN
+  threatIntel    String?        // JSON of external findings
+  createdAt      DateTime       @default(now())
+
+  websiteScans   WebsiteScan[]
+}
+
+model WebsiteScan {
+  id             String         @id @default(cuid())
+  caseId         String?
+  case           Case?          @relation(fields: [caseId], references: [id], onDelete: SetNull)
+  urlId          String?
+  urlRef         URL?           @relation(fields: [urlId], references: [id], onDelete: SetNull)
+  targetUrl      String
+  effectiveUrl   String?
+  verdict        String         @default("SUSPICIOUS") // TRUSTED, LOW_RISK, SUSPICIOUS, HIGH_RISK, MALICIOUS, INCONCLUSIVE
+  riskScore      Int            @default(50)           // 0 to 100
+  confidence     Int            @default(80)           // 0 to 100%
+  redirectChain  String?        // JSON array of URLs
+  httpStatus     Int?
+  tlsIssuer      String?
+  tlsSubject     String?
+  tlsValidTo     DateTime?
+  tlsIsTrusted   Boolean        @default(false)
+  ipAddress      String?
+  serverHeader   String?
+  hasLoginForm   Boolean        @default(false)
+  hasPasswordInput Boolean      @default(false)
+  brandDetected  String?        // e.g. "Microsoft 365", "PayPal"
+  phishingFlags  String?        // JSON array of triggered indicators
+  pageTitle      String?
+  summary        String?
+  createdAt      DateTime       @default(now())
+}
+
+model Domain {
+  id               String       @id @default(cuid())
+  domainName       String       @unique
+  registrar        String?
+  registeredDate   DateTime?
+  domainAgeDays    Int?
+  nameservers      String?      // JSON array
+  mxRecords        String?      // JSON array
+  aRecords         String?      // JSON array
+  txtRecords       String?      // JSON array
+  isNewlyRegistered Boolean     @default(false)
+  isLookalike      Boolean      @default(false)
+  impersonatedBrand String?
+  reputationScore  Int          @default(50) // 0-100 (100 is cleanest)
+  createdAt        DateTime     @default(now())
+}
+
+model IPAddress {
+  id             String       @id @default(cuid())
+  ip             String       @unique
+  reverseDns     String?
+  asn            String?
+  asnOrg         String?
+  countryCode    String?
+  countryName    String?
+  city           String?
+  region         String?
+  latitude       Float?
+  longitude      Float?
+  isHosting      Boolean      @default(false)
+  isTor          Boolean      @default(false)
+  isVpn          Boolean      @default(false)
+  isProxy        Boolean      @default(false)
+  abuseScore     Int          @default(0) // 0 to 100
+  createdAt      DateTime     @default(now())
+}
+
+model Attachment {
+  id             String       @id @default(cuid())
+  emailId        String
+  email          Email        @relation(fields: [emailId], references: [id], onDelete: Cascade)
+  filename       String
+  contentType    String
+  sizeBytes      Int
+  md5            String
+  sha1           String
+  sha256         String
+  isMalicious    Boolean      @default(false)
+  malwareType    String?      // e.g. "Trojan.Dropper", "Macro.Phish"
+  detectionNotes String?
+  createdAt      DateTime     @default(now())
+}
+
+model FileHash {
+  id             String       @id @default(cuid())
+  hashType       String       // MD5, SHA1, SHA256
+  hashValue      String       @unique
+  filename       String?
+  verdict        String       @default("UNKNOWN") // KNOWN_BENIGN, SUSPICIOUS, KNOWN_MALICIOUS, UNKNOWN
+  positives      Int          @default(0)
+  totalEngines   Int          @default(0)
+  threatName     String?
+  details        String?      // JSON findings
+  createdAt      DateTime     @default(now())
+}
+
+model ThreatIntelResult {
+  id             String       @id @default(cuid())
+  provider       String       // VIRUSTOTAL, ABUSEIPDB, URLHAUS, PHISHTANK, INTERNAL
+  indicatorType  String       // IP, DOMAIN, URL, HASH
+  indicatorValue String
+  status         String       // AVAILABLE, NOT_CONFIGURED, RATE_LIMITED, ERROR
+  verdict        String       // BENIGN, SUSPICIOUS, MALICIOUS, UNKNOWN
+  score          Int?
+  rawResponse    String?      // JSON response payload
+  cachedUntil    DateTime?
+  createdAt      DateTime     @default(now())
+
+  @@index([indicatorType, indicatorValue])
+}
+
+model GeoLocation {
+  id             String       @id @default(cuid())
+  ip             String       @unique
+  countryCode    String
+  countryName    String
+  region         String?
+  city           String?
+  latitude       Float
+  longitude      Float
+  timezone       String?
+  createdAt      DateTime     @default(now())
+}
+
+model AIAnalysis {
+  id               String     @id @default(cuid())
+  emailId          String?
+  email            Email?     @relation(fields: [emailId], references: [id], onDelete: Cascade)
+  classification   String     // BENIGN, SPAM, PHISHING, SPEAR_PHISHING, BEC, CREDENTIAL_THEFT, FINANCIAL_FRAUD, MALWARE_DELIVERY
+  confidence       Float      // 0.0 - 1.0
+  intent           String?    // e.g. "Credential harvesting disguised as IT urgent notice"
+  urgencyLevel     String     @default("MEDIUM") // LOW, MEDIUM, HIGH, CRITICAL
+  indicatorsJson   String?    // JSON array of indicators with evidence excerpts
+  explanation      String
+  actionPlanJson   String?    // JSON array of recommendations
+  modelUsed        String     @default("rule-based-fallback") // or e.g. "gpt-4o-cyber", "gemini-1.5-pro"
+  isFallback       Boolean    @default(false)
+  createdAt        DateTime   @default(now())
+}
+
+model ThreatScore {
+  id             String       @id @default(cuid())
+  caseId         String
+  case           Case         @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  score          Int          // 0 - 100
+  verdict        String       // TRUSTED, LOW_RISK, SUSPICIOUS, HIGH_RISK, MALICIOUS, INCONCLUSIVE
+  confidence     Int          // 0 - 100%
+  breakdownJson  String       // JSON array of { reason: string, points: number, category: string }
+  recommendedActions String   // JSON array of strings
+  createdAt      DateTime     @default(now())
+}
+
+model ThreatDNA {
+  id              String      @id @default(cuid())
+  dnaCode         String      @unique // e.g. "MT-DNA-8F3A91C2"
+  caseId          String?
+  case            Case?       @relation(fields: [caseId], references: [id], onDelete: SetNull)
+  emailId         String?
+  email           Email?      @relation(fields: [emailId], references: [id], onDelete: SetNull)
+  headerFingerprint String?
+  infraFingerprint  String?
+  contentFingerprint String?
+  campaignId      String?
+  campaign        Campaign?   @relation(fields: [campaignId], references: [id], onDelete: SetNull)
+  createdAt       DateTime    @default(now())
+}
+
+model Campaign {
+  id              String      @id @default(cuid())
+  campaignName    String      @unique // e.g. "Operation Credential Harvest 365"
+  threatActor     String?     // e.g. "FIN7", "APT29", "Unknown Opportunistic"
+  targetSectors   String?     // JSON array e.g. ["Banking", "Healthcare"]
+  severity        String      @default("HIGH") // LOW, MEDIUM, HIGH, CRITICAL
+  indicatorsCount Int         @default(0)
+  firstSeen       DateTime    @default(now())
+  lastSeen        DateTime    @default(now())
+  description     String?
+
+  threatDNAs      ThreatDNA[]
+  members         CampaignMember[]
+}
+
+model CampaignMember {
+  id              String      @id @default(cuid())
+  campaignId      String
+  campaign        Campaign    @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  entityType      String      // EMAIL, DOMAIN, IP, HASH, URL
+  entityValue     String
+  firstObserved   DateTime    @default(now())
+}
+
+model GraphNode {
+  id              String      @id @default(cuid())
+  caseId          String
+  case            Case        @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  nodeId          String      // Unique within case
+  label           String
+  type            String      // EMAIL, SENDER, DOMAIN, IP, ASN, COUNTRY, URL, ATTACHMENT, HASH, DNA, CAMPAIGN
+  threatLevel     String      @default("INFO") // SAFE, INFO, WARNING, DANGER
+  detailsJson     String?
+}
+
+model GraphEdge {
+  id              String      @id @default(cuid())
+  caseId          String
+  case            Case        @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  sourceId        String
+  targetId        String
+  label           String      // RESOLVES_TO, HOSTS, SENDS, EMBEDS, ATTACHES, MATCHES_DNA, MEMBER_OF
+}
+
+model TimelineEvent {
+  id              String      @id @default(cuid())
+  caseId          String
+  case            Case        @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  timestamp       DateTime
+  title           String
+  category        String      // TRANSMISSION, AUTHENTICATION, ANALYSIS, DETECTION, ACTION
+  description     String
+  source          String?
+  isWarning       Boolean     @default(false)
+}
+
+model Evidence {
+  id              String      @id @default(cuid())
+  caseId          String
+  case            Case        @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  name            String
+  type            String      // RAW_EMAIL, HEADER, DNS_RECORD, HTTP_RESPONSE, TLS_CERT, ATTACHMENT
+  sha256          String
+  md5             String
+  sha1            String
+  sizeBytes       Int
+  storagePath     String?
+  contentSnippet  String?
+  preservedAt     DateTime    @default(now())
+}
+
+model CopilotConversation {
+  id              String           @id @default(cuid())
+  caseId          String
+  case            Case             @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  title           String           @default("Forensic Investigation Dialogue")
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  messages        CopilotMessage[]
+}
+
+model CopilotMessage {
+  id              String               @id @default(cuid())
+  conversationId  String
+  conversation    CopilotConversation  @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  role            String               // user, assistant, system
+  content         String
+  evidenceCitations String?            // JSON array of evidence citations used for grounding
+  createdAt       DateTime             @default(now())
+}
+
+model Report {
+  id              String      @id @default(cuid())
+  caseId          String
+  case            Case        @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  reportNumber    String      @unique // e.g. "MT-REP-2026-001"
+  title           String
+  executiveSummary String
+  investigator    String
+  verdict         String
+  threatScore     Int
+  confidence      Int
+  reportJson      String      // Full structured report JSON
+  createdAt       DateTime    @default(now())
+}
+
+model AuditLog {
+  id              String      @id @default(cuid())
+  userId          String?
+  user            User?       @relation(fields: [userId], references: [id], onDelete: SetNull)
+  caseId          String?
+  case            Case?       @relation(fields: [caseId], references: [id], onDelete: SetNull)
+  action          String      // e.g. "UPLOAD_EMAIL", "ANALYZE_CASE", "CHANGE_VERDICT"
+  details         String?
+  ipAddress       String?
+  timestamp       DateTime    @default(now())
+}
+
+model ModelVersion {
+  id              String      @id @default(cuid())
+  versionName     String      @unique // e.g. "v1.0.4-xgboost-phish"
+  modelType       String      // RANDOM_FOREST, XGBOOST, LIGHTGBM, TRANSFORMER
+  status          String      @default("STAGING") // ACTIVE, STAGING, DEPRECATED
+  accuracy        Float
+  precision       Float
+  recall          Float
+  f1Score         Float
+  rocAuc          Float
+  fpr             Float
+  fnr             Float
+  trainedAt       DateTime    @default(now())
+  artifactPath    String?
+}
+
+model TrainingDataset {
+  id              String      @id @default(cuid())
+  name            String
+  source          String      // e.g. "Apache SpamAssassin Public Corpus", "Enron Public", "PhishTank"
+  sampleCount     Int
+  license         String
+  sha256          String
+  downloadDate    DateTime    @default(now())
+  isCleaned       Boolean     @default(true)
+  piiRedacted     Boolean     @default(true)
+}
