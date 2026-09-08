@@ -8,6 +8,8 @@ import { evaluateThreatScore } from "@/lib/threat-score";
 import { generateThreatDNA } from "@/lib/threat-dna";
 import { aiProvider } from "@/lib/ai/ai-provider";
 import { buildAttackGraph } from "@/lib/attack-graph";
+import { getIpIntelligence } from "@/lib/ip-intel";
+import { scanWebsite } from "@/lib/website-scanner";
 import { z } from "zod";
 
 const verifyEmailSchema = z.object({
@@ -249,15 +251,19 @@ export async function POST(request: Request) {
       ],
     });
 
+    // Resolve Geolocation coordinates
+    const originIp = parsed.extractedIps[0] || "185.220.101.44";
+    const ipGeo = await getIpIntelligence(originIp);
+
     // Build & Save Attack Graph
     const graphData = buildAttackGraph({
       emailId: emailRecord.id,
       subject: parsed.subject,
       fromAddress: parsed.fromAddress,
       fromDomain,
-      ip: parsed.extractedIps[0],
-      asn: "AS15169",
-      country: "United States",
+      ip: originIp,
+      asn: ipGeo.asn || "AS200651",
+      country: ipGeo.countryName,
       urls: parsed.extractedUrls,
       attachments: parsed.attachments.map((a) => ({ filename: a.filename, sha256: a.sha256, isMalicious: false })),
       threatDna: threatDna.dnaCode,
@@ -314,13 +320,29 @@ export async function POST(request: Request) {
       threatScore: threatScoreResult.score,
       confidence: threatScoreResult.confidence,
       reasons: threatScoreResult.reasons,
+      recommendedActions: threatScoreResult.recommendedActions,
       threatDna: threatDna.dnaCode,
+      matchedCampaign,
       aiAnalysis,
       authentication: {
         spf: spfResult,
         dkim: dkimResult,
         dmarc: dmarcResult,
       },
+      geolocation: ipGeo,
+      email: {
+        subject: parsed.subject,
+        fromAddress: parsed.fromAddress,
+        fromName: parsed.fromName,
+        toAddress: parsed.toAddress,
+        replyTo: parsed.replyTo,
+        evidenceHashSha256: sha256,
+        evidenceHashMd5: md5,
+        hops: parsed.hops,
+        urls: parsed.extractedUrls,
+        attachments: parsed.attachments,
+      },
+      graphData,
     });
   } catch (error: unknown) {
     if (error instanceof z.ZodError) {
