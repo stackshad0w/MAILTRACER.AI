@@ -98,7 +98,7 @@ export async function POST(request: Request) {
 
     // 8. Persist to Database
     const caseCount = await db.case.count();
-    const caseNumber = `MT-CASE-${new Date().getFullYear()}-${String(caseCount + 1).padStart(3, "0")}`;
+    const caseNumber = `MT-CASE-${new Date().getFullYear()}-${String(caseCount + 1).padStart(3, "0")}-${Date.now().toString().slice(-4)}`;
 
     const newCase = await db.case.create({
       data: {
@@ -195,9 +195,15 @@ export async function POST(request: Request) {
       },
     });
 
-    // Save Threat DNA
-    await db.threatDNA.create({
-      data: {
+    // Save Threat DNA (upsert to handle recurring threat fingerprints)
+    await db.threatDNA.upsert({
+      where: { dnaCode: threatDna.dnaCode },
+      update: {
+        caseId: newCase.id,
+        emailId: emailRecord.id,
+        campaignId: existingDnaMatch?.campaignId,
+      },
+      create: {
         dnaCode: threatDna.dnaCode,
         caseId: newCase.id,
         emailId: emailRecord.id,
@@ -207,6 +213,7 @@ export async function POST(request: Request) {
         campaignId: existingDnaMatch?.campaignId,
       },
     });
+
 
     // Save Evidence Vault Record
     await db.evidence.create({
