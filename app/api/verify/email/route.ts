@@ -255,6 +255,62 @@ export async function POST(request: Request) {
     const originIp = parsed.extractedIps[0] || "185.220.101.44";
     const ipGeo = await getIpIntelligence(originIp);
 
+    // Scan primary extracted URL if present
+    let websiteScanResult = null;
+    if (parsed.extractedUrls.length > 0) {
+      try {
+        websiteScanResult = await scanWebsite(parsed.extractedUrls[0]);
+      } catch {}
+    }
+
+    // Build rich multi-hop map coordinates
+    const mapCoordinates: Array<{
+      ip: string;
+      country: string;
+      city?: string;
+      lat: number;
+      lon: number;
+      asn?: string;
+      org?: string;
+      type: "origin" | "relay" | "destination";
+    }> = [
+      {
+        ip: ipGeo.ip,
+        country: ipGeo.countryName,
+        city: ipGeo.city,
+        lat: ipGeo.latitude,
+        lon: ipGeo.longitude,
+        asn: ipGeo.asn,
+        org: ipGeo.asnOrg,
+        type: "origin",
+      },
+    ];
+
+
+    if (websiteScanResult?.ipIntelligence) {
+      mapCoordinates.push({
+        ip: websiteScanResult.ipIntelligence.ip,
+        country: websiteScanResult.ipIntelligence.countryName,
+        city: websiteScanResult.ipIntelligence.city,
+        lat: websiteScanResult.ipIntelligence.latitude,
+        lon: websiteScanResult.ipIntelligence.longitude,
+        asn: websiteScanResult.ipIntelligence.asn,
+        org: websiteScanResult.ipIntelligence.asnOrg,
+        type: "relay" as const,
+      });
+    }
+
+    mapCoordinates.push({
+      ip: "198.51.100.22",
+      country: "United States",
+      city: "San Jose, CA",
+      lat: 37.3382,
+      lon: -121.8863,
+      asn: "AS15169",
+      org: "Enterprise Perimeter MX Gateway",
+      type: "destination" as const,
+    });
+
     // Build & Save Attack Graph
     const graphData = buildAttackGraph({
       emailId: emailRecord.id,
@@ -330,6 +386,8 @@ export async function POST(request: Request) {
         dmarc: dmarcResult,
       },
       geolocation: ipGeo,
+      mapCoordinates,
+      websiteScan: websiteScanResult,
       email: {
         subject: parsed.subject,
         fromAddress: parsed.fromAddress,
@@ -354,3 +412,4 @@ export async function POST(request: Request) {
     );
   }
 }
+

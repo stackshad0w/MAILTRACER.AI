@@ -1,12 +1,18 @@
 import tls from "node:tls";
+import dns from "node:dns/promises";
 import { validateSafeUrl } from "./ssrf-filter";
 import { detectLookalikeDomain } from "./domain-intel";
+import { getIpIntelligence, IpIntelligenceResult } from "./ip-intel";
 import { RiskVerdict } from "./types";
 
 export interface WebsiteScanResult {
   targetUrl: string;
   effectiveUrl: string;
   httpStatus?: number;
+  latencyMs?: number;
+  serverIp?: string;
+  serverBanner?: string;
+  ipIntelligence?: IpIntelligenceResult;
   redirectChain: string[];
   tls: {
     issuer?: string;
@@ -26,6 +32,8 @@ export interface WebsiteScanResult {
     hasPasswordInput: boolean;
     brandDetected?: string;
     phishingFlags: string[];
+    formsCount?: number;
+    linksCount?: number;
   };
   verdict: RiskVerdict;
   riskScore: number;
@@ -77,9 +85,14 @@ async function inspectTlsCertificate(hostname: string, port = 443): Promise<{
 }
 
 /**
- * Safely scans an external public website with SSRF protection, TLS inspection, and HTML parsing
+ * Safely scans an external public website with SSRF protection, TLS inspection, live server IP geolocation, and DOM security analysis
  */
-export async function scanWebsite(rawUrl: string): Promise<WebsiteScanResult> {
+export async function scanWebsite(inputUrl: string): Promise<WebsiteScanResult> {
+  let rawUrl = inputUrl.trim();
+  if (!/^https?:\/\//i.test(rawUrl)) {
+    rawUrl = `https://${rawUrl}`;
+  }
+
   const ssrfCheck = await validateSafeUrl(rawUrl);
   if (!ssrfCheck.isValid) {
     throw new Error(ssrfCheck.error || "URL violates SSRF security boundary.");
@@ -89,13 +102,23 @@ export async function scanWebsite(rawUrl: string): Promise<WebsiteScanResult> {
   const hostname = parsedUrl.hostname;
   const redirectChain: string[] = [rawUrl];
 
-  // 1. Inspect TLS if HTTPS
+  // 1. Resolve Server IP and Live Geolocation Intelligence
+  let serverIp: string | undefined = undefined;
+  let ipGeo: IpIntelligenceResult | undefined = undefined;
+  try {
+    ipGeo = await getIpIntelligence(hostname);
+    serverIp = ipGeo.ip;
+  } catch {
+    // Non-fatal if DNS resolution fails initially
+  }
+
+  // 2. Inspect TLS if HTTPS
   let tlsInfo = { isTrusted: false };
   if (parsedUrl.protocol === "https:") {
     tlsInfo = await inspectTlsCertificate(hostname, parsedUrl.port ? parseInt(parsedUrl.port) : 443);
   }
 
-  // 2. Safe HTTP Fetch with timeout & max size limit
+  // 3. Safe HTTP Fetch with timeout & latency measurement
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 7000);
 
@@ -103,6 +126,8 @@ export async function scanWebsite(rawUrl: string): Promise<WebsiteScanResult> {
   let responseText = "";
   let httpStatus = 0;
   let effectiveUrl = rawUrl;
+  let latencyMs = 0;
+  const startTime = Date.now();
 
   try {
     response = await fetch(rawUrl, {
@@ -114,6 +139,7 @@ export async function scanWebsite(rawUrl: string): Promise<WebsiteScanResult> {
         Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
       },
     });
+    latencyMs = Date.now() - startTime;
     clearTimeout(timeoutId);
 
     httpStatus = response.status;
@@ -146,12 +172,16 @@ export async function scanWebsite(rawUrl: string): Promise<WebsiteScanResult> {
     }
   } catch (err: unknown) {
     clearTimeout(timeoutId);
+    latencyMs = Date.now() - startTime;
     // If external site unreachable, analyze domain statically
     const lookalike = detectLookalikeDomain(hostname);
     return {
       targetUrl: rawUrl,
       effectiveUrl: rawUrl,
       httpStatus: 0,
+      latencyMs,
+      serverIp,
+      ipIntelligence: ipGeo,
       redirectChain,
       tls: tlsInfo,
       securityHeaders: { hasHsts: false, hasCsp: false, hasXFrameOptions: false, hasContentTypeOptions: false },
@@ -160,7 +190,7 @@ export async function scanWebsite(rawUrl: string): Promise<WebsiteScanResult> {
         hasLoginForm: false,
         hasPasswordInput: false,
         brandDetected: lookalike.impersonatedBrand,
-        phishingFlags: lookalike.isLookalike ? ["Lookalike Domain Stem"] : ["Host Unreachable / Offline"],
+        phishingFlags: lookalike.isLookalike ? ["Lookalike Domain Stem"] : ["Host Unreachable / Connection Timeout"],
       },
       verdict: lookalike.isLookalike ? "HIGH_RISK" : "INCONCLUSIVE",
       riskScore: lookalike.isLookalike ? 75 : 45,
@@ -169,49 +199,54 @@ export async function scanWebsite(rawUrl: string): Promise<WebsiteScanResult> {
     };
   }
 
-  // 3. Security Headers Evaluation
+  // 4. Security Headers Evaluation
   const headers = response.headers;
   const hasHsts = headers.has("strict-transport-security");
   const hasCsp = headers.has("content-security-policy");
   const hasXFrameOptions = headers.has("x-frame-options");
   const hasContentTypeOptions = headers.has("x-content-type-options");
+  const serverBanner = headers.get("server") || undefined;
 
-  // 4. Content DOM Analysis
+  // 5. Content DOM Analysis
   const titleMatch = responseText.match(/<title[^>]*>([^<]+)<\/title>/i);
   const pageTitle = titleMatch ? titleMatch[1].trim() : undefined;
+
+  const formsCount = (responseText.match(/<form/gi) || []).length;
+  const linksCount = (responseText.match(/<a\s+(?:[^>]*?\s+)?href=/gi) || []).length;
 
   const hasPasswordInput = /<input[^>]+type=["']password["']/i.test(responseText);
   const hasLoginForm =
     hasPasswordInput ||
-    (/<form/i.test(responseText) && /(login|signin|log-in|sign-in|authenticate)/i.test(responseText));
+    (/<form/i.test(responseText) && /(login|signin|log-in|sign-in|authenticate|passphrase|secret)/i.test(responseText));
 
   const phishingFlags: string[] = [];
   const lookalike = detectLookalikeDomain(hostname);
   if (lookalike.isLookalike) {
-    phishingFlags.push(`Lookalike Domain: ${lookalike.impersonatedBrand}`);
+    phishingFlags.push(`Deceptive Brand Lookalike: Impersonates ${lookalike.impersonatedBrand}`);
   }
 
   if (hasPasswordInput) {
-    phishingFlags.push("Credential input field (type=password) detected");
+    phishingFlags.push("Credential input field (type=password) detected on page");
   }
 
   if (hasLoginForm && lookalike.isLookalike) {
-    phishingFlags.push("High-threat: Password harvesting form on deceptive lookalike brand domain");
+    phishingFlags.push("Critical Hazard: Password harvest form on deceptive lookalike brand domain");
   }
 
-  if (/(urgent|account suspended|verify your identity|security alert|action required)/i.test(responseText)) {
-    phishingFlags.push("Social engineering urgency language found in page text");
+  if (/(urgent|account suspended|verify your identity|security alert|action required|suspended immediately)/i.test(responseText)) {
+    phishingFlags.push("Social engineering urgency language identified in page body");
   }
 
   // Calculate Risk Score
-  let risk = 10;
-  if (!tlsInfo.isTrusted) risk += 15;
-  if (lookalike.isLookalike) risk += 35;
+  let risk = 8;
+  if (!tlsInfo.isTrusted) risk += 18;
+  if (lookalike.isLookalike) risk += 38;
   if (hasPasswordInput) risk += 20;
-  if (hasLoginForm && lookalike.isLookalike) risk += 25;
+  if (hasLoginForm && lookalike.isLookalike) risk += 28;
   if (!hasHsts) risk += 5;
   if (!hasCsp) risk += 5;
   if (redirectChain.length > 2) risk += 10;
+  if (ipGeo?.isHosting && lookalike.isLookalike) risk += 15;
 
   const riskScore = Math.min(100, Math.max(0, risk));
 
@@ -223,13 +258,17 @@ export async function scanWebsite(rawUrl: string): Promise<WebsiteScanResult> {
 
   const explanation =
     verdict === "MALICIOUS" || verdict === "HIGH_RISK"
-      ? `Website analysis identified critical credential harvesting signals. ${phishingFlags.join("; ")}. Remember: HTTPS confirms encryption, but does not prove the website is legitimate.`
-      : `Website presents a ${verdict.toLowerCase().replace("_", " ")} profile. Security headers: ${hasHsts ? "HSTS present" : "Missing HSTS"}, ${hasCsp ? "CSP active" : "Missing CSP"}.`;
+      ? `Website analysis identified critical credential harvesting signals. ${phishingFlags.join("; ")}. Remember: HTTPS confirms encryption, but does not prove the website is authentic.`
+      : `Website presents a ${verdict.toLowerCase().replace("_", " ")} profile. Security headers: ${hasHsts ? "HSTS active" : "Missing HSTS"}, ${hasCsp ? "CSP active" : "Missing CSP"}. Server latency: ${latencyMs}ms.`;
 
   return {
     targetUrl: rawUrl,
     effectiveUrl,
     httpStatus,
+    latencyMs,
+    serverIp,
+    serverBanner,
+    ipIntelligence: ipGeo,
     redirectChain,
     tls: tlsInfo,
     securityHeaders: {
@@ -244,6 +283,8 @@ export async function scanWebsite(rawUrl: string): Promise<WebsiteScanResult> {
       hasPasswordInput,
       brandDetected: lookalike.impersonatedBrand,
       phishingFlags,
+      formsCount,
+      linksCount,
     },
     verdict,
     riskScore,
@@ -251,3 +292,4 @@ export async function scanWebsite(rawUrl: string): Promise<WebsiteScanResult> {
     explanation,
   };
 }
+

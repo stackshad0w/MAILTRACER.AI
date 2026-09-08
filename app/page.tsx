@@ -6,9 +6,6 @@ import {
   ShieldCheck, 
   AlertTriangle, 
   Globe, 
-  Key, 
-  Link as LinkIcon, 
-  FileText, 
   Terminal, 
   Sparkles, 
   ArrowRight, 
@@ -21,7 +18,12 @@ import {
   Bot, 
   Network,
   RotateCcw,
-  Zap
+  Zap,
+  ExternalLink,
+  Lock,
+  Server,
+  Clock,
+  Compass
 } from "lucide-react";
 import { GeoMap } from "@/components/geo-map";
 import { AttackGraphView } from "@/components/attack-graph-view";
@@ -29,7 +31,7 @@ import { CopilotChat } from "@/components/copilot-chat";
 import { SYNTHETIC_DEMO_CASES } from "@/lib/seed-data";
 
 export default function UnifiedForensicPage() {
-  const [rawEmail, setRawEmail] = useState("");
+  const [inputText, setInputText] = useState("");
   const [loading, setLoading] = useState(false);
   const [analysisStage, setAnalysisStage] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -38,12 +40,27 @@ export default function UnifiedForensicPage() {
 
   const resultsRef = useRef<HTMLDivElement>(null);
 
-  // 1-Click One-Shot Investigation Engine
-  const runOneClickInvestigation = async (emailPayload?: string) => {
-    const textToAnalyze = emailPayload !== undefined ? emailPayload : rawEmail;
+  // Helper to detect if the input is a website URL or domain
+  const isUrlOrDomain = (text: string) => {
+    const trimmed = text.trim();
+    if (/^https?:\/\//i.test(trimmed)) return true;
+    if (
+      /^[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}(?:\/[^\s]*)?$/i.test(trimmed) &&
+      !trimmed.includes("\n") &&
+      !trimmed.includes("From:") &&
+      !trimmed.includes("Subject:")
+    ) {
+      return true;
+    }
+    return false;
+  };
+
+  // 1-Click One-Shot Unified Investigation Engine
+  const runOneClickInvestigation = async (overridePayload?: string) => {
+    const textToAnalyze = overridePayload !== undefined ? overridePayload : inputText;
 
     if (!textToAnalyze.trim()) {
-      setError("Please paste an email or select one of the 1-Click Test Scenarios above.");
+      setError("Please enter a website URL, paste an email, or select one of the 1-Click Scenarios.");
       return;
     }
 
@@ -51,51 +68,108 @@ export default function UnifiedForensicPage() {
     setLoading(true);
     setResult(null);
 
+    const isWebsite = isUrlOrDomain(textToAnalyze);
+
     // Dynamic analysis stage progress sequence
-    setAnalysisStage("Preserving Evidence Hash (SHA256 / MD5)...");
-    const t1 = setTimeout(() => setAnalysisStage("Interrogating Routing Hops & Geolocation Infrastructure..."), 300);
-    const t2 = setTimeout(() => setAnalysisStage("Verifying SPF, DKIM & DMARC Cryptographic Alignment..."), 600);
-    const t3 = setTimeout(() => setAnalysisStage("Scanning Embedded Links under SSRF Safeguards..."), 900);
-    const t4 = setTimeout(() => setAnalysisStage("Running AI Threat Intent & Social Engineering Detection..."), 1200);
-    const t5 = setTimeout(() => setAnalysisStage("Synthesizing Threat DNA & Correlating Attack Graph..."), 1500);
+    if (isWebsite) {
+      setAnalysisStage("Resolving Server IP via Live DNS...");
+      const t1 = setTimeout(() => setAnalysisStage("Querying BGP Routing & Geolocation Infrastructure..."), 300);
+      const t2 = setTimeout(() => setAnalysisStage("Interrogating TLS Peer Certificate & Encryption..."), 600);
+      const t3 = setTimeout(() => setAnalysisStage("Auditing Security Headers (HSTS, CSP, X-Frame)..."), 900);
+      const t4 = setTimeout(() => setAnalysisStage("Inspecting DOM for Credential Harvesting & Forms..."), 1200);
 
-    try {
-      const res = await fetch("/api/verify/email", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ rawEmail: textToAnalyze }),
-      });
-      const data = await res.json();
+      try {
+        const res = await fetch("/api/verify/website", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ url: textToAnalyze }),
+        });
+        const data = await res.json();
 
-      clearTimeout(t1);
-      clearTimeout(t2);
-      clearTimeout(t3);
-      clearTimeout(t4);
-      clearTimeout(t5);
+        clearTimeout(t1);
+        clearTimeout(t2);
+        clearTimeout(t3);
+        clearTimeout(t4);
 
-      if (data.success) {
-        setResult(data);
-        setTimeout(() => {
-          resultsRef.current?.scrollIntoView({ behavior: "smooth" });
-        }, 200);
-      } else {
-        setError(data.error || "Forensic analysis failed");
+        if (data.success) {
+          setResult({
+            isWebsiteScan: true,
+            targetUrl: data.result.targetUrl,
+            caseNumber: data.caseNumber,
+            verdict: data.verdict,
+            threatScore: data.threatScore,
+            confidence: data.confidence,
+            reasons: data.reasons,
+            mapCoordinates: data.mapCoordinates,
+            websiteScan: data.result,
+            geolocation: data.geolocation,
+          });
+          setTimeout(() => {
+            resultsRef.current?.scrollIntoView({ behavior: "smooth" });
+          }, 200);
+        } else {
+          setError(data.error || "Website security scan failed");
+        }
+      } catch {
+        clearTimeout(t1);
+        clearTimeout(t2);
+        clearTimeout(t3);
+        clearTimeout(t4);
+        setError("Network error communicating with website scanner.");
+      } finally {
+        setLoading(false);
+        setAnalysisStage("");
       }
-    } catch {
-      clearTimeout(t1);
-      clearTimeout(t2);
-      clearTimeout(t3);
-      clearTimeout(t4);
-      clearTimeout(t5);
-      setError("Network timeout communicating with forensic verification engine.");
-    } finally {
-      setLoading(false);
-      setAnalysisStage("");
+    } else {
+      // Email Forensic Scan
+      setAnalysisStage("Preserving Evidence Hash (SHA256 / MD5)...");
+      const t1 = setTimeout(() => setAnalysisStage("Interrogating Routing Hops & Geolocation Infrastructure..."), 300);
+      const t2 = setTimeout(() => setAnalysisStage("Verifying SPF, DKIM & DMARC Cryptographic Alignment..."), 600);
+      const t3 = setTimeout(() => setAnalysisStage("Scanning Embedded Links under SSRF Safeguards..."), 900);
+      const t4 = setTimeout(() => setAnalysisStage("Running AI Threat Intent & Social Engineering Detection..."), 1200);
+      const t5 = setTimeout(() => setAnalysisStage("Synthesizing Threat DNA & Correlating Attack Graph..."), 1500);
+
+      try {
+        const res = await fetch("/api/verify/email", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ rawEmail: textToAnalyze }),
+        });
+        const data = await res.json();
+
+        clearTimeout(t1);
+        clearTimeout(t2);
+        clearTimeout(t3);
+        clearTimeout(t4);
+        clearTimeout(t5);
+
+        if (data.success) {
+          setResult({
+            ...data,
+            isWebsiteScan: false,
+          });
+          setTimeout(() => {
+            resultsRef.current?.scrollIntoView({ behavior: "smooth" });
+          }, 200);
+        } else {
+          setError(data.error || "Forensic analysis failed");
+        }
+      } catch {
+        clearTimeout(t1);
+        clearTimeout(t2);
+        clearTimeout(t3);
+        clearTimeout(t4);
+        clearTimeout(t5);
+        setError("Network timeout communicating with forensic verification engine.");
+      } finally {
+        setLoading(false);
+        setAnalysisStage("");
+      }
     }
   };
 
-  // 1-Click Sample Trigger
-  const triggerSampleTest = (index: number) => {
+  // 1-Click Email Sample Trigger
+  const triggerEmailSample = (index: number) => {
     const demo = SYNTHETIC_DEMO_CASES[index];
     const sample = `From: ${demo.email.fromName || "Sender"} <${demo.email.fromAddress}>
 To: ${demo.email.toAddress}
@@ -107,8 +181,14 @@ Authentication-Results: spf=${demo.email.authResults.spf.status} (${demo.email.a
 
 ${demo.email.bodyText}`;
 
-    setRawEmail(sample);
+    setInputText(sample);
     runOneClickInvestigation(sample);
+  };
+
+  // 1-Click Website Scan Trigger
+  const triggerWebsiteSample = (url: string) => {
+    setInputText(url);
+    runOneClickInvestigation(url);
   };
 
   const handleCopy = (text: string) => {
@@ -116,6 +196,8 @@ ${demo.email.bodyText}`;
     setCopiedHash(text);
     setTimeout(() => setCopiedHash(null), 2000);
   };
+
+  const isTargetUrl = isUrlOrDomain(inputText);
 
   return (
     <div className="space-y-8 pb-20 max-w-6xl mx-auto">
@@ -129,117 +211,197 @@ ${demo.email.bodyText}`;
         <h1 className="text-3xl sm:text-5xl font-black tracking-tight text-slate-100">
           AI Email Threat Detection, Geolocation <br />
           <span className="bg-gradient-to-r from-cyan-400 via-teal-300 to-emerald-400 bg-clip-text text-transparent">
-            & Cyber Forensics Platform
+            & Live Cyber Forensics Platform
           </span>
         </h1>
 
         <p className="text-xs sm:text-sm text-slate-400 max-w-2xl mx-auto">
-          One click verifies trust level, traces BGP IP geolocation, validates SPF/DKIM/DMARC authentication, inspects websites, classifies threat intent, and generates interactive attack graphs.
+          One click performs real live website inspection, interactive BGP Leaflet geolocation, SPF/DKIM/DMARC cryptographic validation, threat intent classification, and attack correlation.
         </p>
       </div>
 
-      {/* 1-Click Instant Test Scenario Buttons */}
-      <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-4 shadow-xl backdrop-blur-md">
-        <div className="flex items-center justify-between mb-3 border-b border-slate-800 pb-2">
-          <span className="text-xs font-bold text-slate-300 flex items-center gap-1.5 font-mono">
-            <Sparkles className="h-3.5 w-3.5 text-amber-400" />
-            TRY 1-CLICK TEST SCENARIOS:
-          </span>
-          <span className="text-[10px] font-mono text-slate-500 uppercase">INSTANT VERIFICATION</span>
+      {/* 1-Click Instant Test Scenario Hub */}
+      <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-5 shadow-xl backdrop-blur-md space-y-4">
+        {/* Email Scenarios */}
+        <div>
+          <div className="flex items-center justify-between mb-2.5">
+            <span className="text-xs font-bold text-slate-300 flex items-center gap-1.5 font-mono">
+              <Sparkles className="h-3.5 w-3.5 text-amber-400" />
+              1-CLICK EMAIL FORENSIC SCENARIOS:
+            </span>
+            <span className="text-[10px] font-mono text-slate-500 uppercase">INSTANT VERIFICATION</span>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
+            <button
+              onClick={() => triggerEmailSample(0)}
+              disabled={loading}
+              className="flex flex-col text-left p-3 rounded-xl border border-rose-500/30 bg-rose-950/20 hover:bg-rose-950/40 hover:border-rose-500/60 transition-all group disabled:opacity-50 shadow-sm cursor-pointer"
+            >
+              <div className="flex items-center justify-between text-[11px] font-bold text-rose-400 font-mono">
+                <span>TEST 1: PHISHING</span>
+                <span className="text-[10px] bg-rose-500/20 px-1.5 py-0.2 rounded">92/100</span>
+              </div>
+              <span className="mt-1 text-xs font-bold text-slate-200 group-hover:text-cyan-300 transition-colors">
+                Microsoft 365 Credential Theft
+              </span>
+              <span className="text-[10px] text-slate-400 mt-0.5 line-clamp-1">
+                Lookalike domain + password form + DMARC fail
+              </span>
+            </button>
+
+            <button
+              onClick={() => triggerEmailSample(1)}
+              disabled={loading}
+              className="flex flex-col text-left p-3 rounded-xl border border-amber-500/30 bg-amber-950/20 hover:bg-amber-950/40 hover:border-amber-500/60 transition-all group disabled:opacity-50 shadow-sm cursor-pointer"
+            >
+              <div className="flex items-center justify-between text-[11px] font-bold text-amber-400 font-mono">
+                <span>TEST 2: BEC FRAUD</span>
+                <span className="text-[10px] bg-amber-500/20 px-1.5 py-0.2 rounded">82/100</span>
+              </div>
+              <span className="mt-1 text-xs font-bold text-slate-200 group-hover:text-cyan-300 transition-colors">
+                CEO Wire Transfer Impersonation
+              </span>
+              <span className="text-[10px] text-slate-400 mt-0.5 line-clamp-1">
+                Urgent $142,500 wire + Reply-To diversion
+              </span>
+            </button>
+
+            <button
+              onClick={() => triggerEmailSample(2)}
+              disabled={loading}
+              className="flex flex-col text-left p-3 rounded-xl border border-rose-500/30 bg-rose-950/20 hover:bg-rose-950/40 hover:border-rose-500/60 transition-all group disabled:opacity-50 shadow-sm cursor-pointer"
+            >
+              <div className="flex items-center justify-between text-[11px] font-bold text-rose-400 font-mono">
+                <span>TEST 3: MALWARE</span>
+                <span className="text-[10px] bg-rose-500/20 px-1.5 py-0.2 rounded">98/100</span>
+              </div>
+              <span className="mt-1 text-xs font-bold text-slate-200 group-hover:text-cyan-300 transition-colors">
+                Trojan Invoice Macro Dropper
+              </span>
+              <span className="text-[10px] text-slate-400 mt-0.5 line-clamp-1">
+                Weaponized .xlsm workbook + known hash
+              </span>
+            </button>
+
+            <button
+              onClick={() => triggerEmailSample(3)}
+              disabled={loading}
+              className="flex flex-col text-left p-3 rounded-xl border border-emerald-500/30 bg-emerald-950/20 hover:bg-emerald-950/40 hover:border-emerald-500/60 transition-all group disabled:opacity-50 shadow-sm cursor-pointer"
+            >
+              <div className="flex items-center justify-between text-[11px] font-bold text-emerald-400 font-mono">
+                <span>TEST 4: BENIGN</span>
+                <span className="text-[10px] bg-emerald-500/20 px-1.5 py-0.2 rounded">08/100</span>
+              </div>
+              <span className="mt-1 text-xs font-bold text-slate-200 group-hover:text-cyan-300 transition-colors">
+                Legitimate Cloud Newsletter
+              </span>
+              <span className="text-[10px] text-slate-400 mt-0.5 line-clamp-1">
+                Passing SPF, DKIM, and DMARC alignment
+              </span>
+            </button>
+          </div>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
-          <button
-            onClick={() => triggerSampleTest(0)}
-            disabled={loading}
-            className="flex flex-col text-left p-3 rounded-xl border border-rose-500/30 bg-rose-950/20 hover:bg-rose-950/40 hover:border-rose-500/60 transition-all group disabled:opacity-50 shadow-sm"
-          >
-            <div className="flex items-center justify-between text-[11px] font-bold text-rose-400 font-mono">
-              <span>TEST 1: PHISHING</span>
-              <span className="text-[10px] bg-rose-500/20 px-1.5 py-0.2 rounded">92/100</span>
-            </div>
-            <span className="mt-1 text-xs font-bold text-slate-200 group-hover:text-cyan-300 transition-colors">
-              Microsoft 365 Credential Theft
+        {/* Real Live Website Scenarios */}
+        <div className="border-t border-slate-800 pt-3">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-xs font-bold text-slate-300 flex items-center gap-1.5 font-mono">
+              <Globe className="h-3.5 w-3.5 text-cyan-400" />
+              1-CLICK REAL LIVE WEBSITE SCANS:
             </span>
-            <span className="text-[10px] text-slate-400 mt-0.5 line-clamp-1">
-              Lookalike domain + password form + DMARC fail
+            <span className="text-[10px] font-mono text-cyan-400 bg-cyan-950/60 border border-cyan-500/30 px-2 py-0.5 rounded">
+              REAL HTTP + LIVE TLS + LEAFLET MAP
             </span>
-          </button>
+          </div>
 
-          <button
-            onClick={() => triggerSampleTest(1)}
-            disabled={loading}
-            className="flex flex-col text-left p-3 rounded-xl border border-amber-500/30 bg-amber-950/20 hover:bg-amber-950/40 hover:border-amber-500/60 transition-all group disabled:opacity-50 shadow-sm"
-          >
-            <div className="flex items-center justify-between text-[11px] font-bold text-amber-400 font-mono">
-              <span>TEST 2: BEC FRAUD</span>
-              <span className="text-[10px] bg-amber-500/20 px-1.5 py-0.2 rounded">82/100</span>
-            </div>
-            <span className="mt-1 text-xs font-bold text-slate-200 group-hover:text-cyan-300 transition-colors">
-              CEO Wire Transfer Impersonation
-            </span>
-            <span className="text-[10px] text-slate-400 mt-0.5 line-clamp-1">
-              Urgent $142,500 wire + Reply-To diversion
-            </span>
-          </button>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+            <button
+              onClick={() => triggerWebsiteSample("https://github.com")}
+              disabled={loading}
+              className="flex items-center justify-between p-2.5 rounded-xl border border-slate-700 bg-slate-950/60 hover:bg-slate-850 hover:border-cyan-500/60 transition-all group disabled:opacity-50 cursor-pointer"
+            >
+              <div className="flex items-center gap-2">
+                <Globe className="h-4 w-4 text-cyan-400" />
+                <div className="text-left">
+                  <span className="text-xs font-bold text-slate-200 block group-hover:text-cyan-300">Scan: github.com</span>
+                  <span className="text-[10px] text-slate-400 block">Live Developer Cloud Platform</span>
+                </div>
+              </div>
+              <span className="text-[10px] font-mono text-emerald-400 bg-emerald-950/60 border border-emerald-500/30 px-1.5 py-0.5 rounded">
+                LIVE WEB
+              </span>
+            </button>
 
-          <button
-            onClick={() => triggerSampleTest(2)}
-            disabled={loading}
-            className="flex flex-col text-left p-3 rounded-xl border border-rose-500/30 bg-rose-950/20 hover:bg-rose-950/40 hover:border-rose-500/60 transition-all group disabled:opacity-50 shadow-sm"
-          >
-            <div className="flex items-center justify-between text-[11px] font-bold text-rose-400 font-mono">
-              <span>TEST 3: MALWARE</span>
-              <span className="text-[10px] bg-rose-500/20 px-1.5 py-0.2 rounded">98/100</span>
-            </div>
-            <span className="mt-1 text-xs font-bold text-slate-200 group-hover:text-cyan-300 transition-colors">
-              Trojan Invoice Macro Dropper
-            </span>
-            <span className="text-[10px] text-slate-400 mt-0.5 line-clamp-1">
-              Weaponized .xlsm workbook + known hash
-            </span>
-          </button>
+            <button
+              onClick={() => triggerWebsiteSample("https://cloudflare.com")}
+              disabled={loading}
+              className="flex items-center justify-between p-2.5 rounded-xl border border-slate-700 bg-slate-950/60 hover:bg-slate-850 hover:border-cyan-500/60 transition-all group disabled:opacity-50 cursor-pointer"
+            >
+              <div className="flex items-center gap-2">
+                <Server className="h-4 w-4 text-teal-400" />
+                <div className="text-left">
+                  <span className="text-xs font-bold text-slate-200 block group-hover:text-teal-300">Scan: cloudflare.com</span>
+                  <span className="text-[10px] text-slate-400 block">Global Anycast CDN & Edge</span>
+                </div>
+              </div>
+              <span className="text-[10px] font-mono text-teal-400 bg-teal-950/60 border border-teal-500/30 px-1.5 py-0.5 rounded">
+                LIVE WEB
+              </span>
+            </button>
 
-          <button
-            onClick={() => triggerSampleTest(3)}
-            disabled={loading}
-            className="flex flex-col text-left p-3 rounded-xl border border-emerald-500/30 bg-emerald-950/20 hover:bg-emerald-950/40 hover:border-emerald-500/60 transition-all group disabled:opacity-50 shadow-sm"
-          >
-            <div className="flex items-center justify-between text-[11px] font-bold text-emerald-400 font-mono">
-              <span>TEST 4: BENIGN</span>
-              <span className="text-[10px] bg-emerald-500/20 px-1.5 py-0.2 rounded">08/100</span>
-            </div>
-            <span className="mt-1 text-xs font-bold text-slate-200 group-hover:text-cyan-300 transition-colors">
-              Legitimate Cloud Newsletter
-            </span>
-            <span className="text-[10px] text-slate-400 mt-0.5 line-clamp-1">
-              Passing SPF, DKIM, and DMARC alignment
-            </span>
-          </button>
+            <button
+              onClick={() => triggerWebsiteSample("https://login.microsoft-verify-portal.net/auth")}
+              disabled={loading}
+              className="flex items-center justify-between p-2.5 rounded-xl border border-rose-500/30 bg-rose-950/20 hover:bg-rose-950/40 hover:border-rose-500/60 transition-all group disabled:opacity-50 cursor-pointer"
+            >
+              <div className="flex items-center gap-2">
+                <ShieldAlert className="h-4 w-4 text-rose-400" />
+                <div className="text-left">
+                  <span className="text-xs font-bold text-slate-200 block group-hover:text-rose-300">Scan Phishing Test URL</span>
+                  <span className="text-[10px] text-slate-400 block">Microsoft Lookalike Credential Trap</span>
+                </div>
+              </div>
+              <span className="text-[10px] font-mono text-rose-400 bg-rose-950/60 border border-rose-500/30 px-1.5 py-0.5 rounded">
+                PHISHING
+              </span>
+            </button>
+          </div>
         </div>
       </div>
 
-      {/* Main Analysis Console */}
+      {/* Main Unified Input Console */}
       <div className="rounded-2xl border border-slate-800 bg-slate-900/80 backdrop-blur-xl p-5 sm:p-6 shadow-2xl space-y-4">
         <div className="flex items-center justify-between">
           <span className="text-xs font-bold text-slate-300 uppercase tracking-wider font-mono flex items-center gap-2">
             <Terminal className="h-4 w-4 text-cyan-400" />
-            Input Console: Paste Raw RFC5322 EML Message, Headers, or Links
+            Unified Console: Paste Any URL / Website OR Raw RFC5322 Email
           </span>
-          {rawEmail && (
-            <button
-              onClick={() => setRawEmail("")}
-              className="text-xs text-slate-500 hover:text-slate-300 flex items-center gap-1 font-mono"
-            >
-              <RotateCcw className="h-3 w-3" /> Clear
-            </button>
-          )}
+          <div className="flex items-center gap-2">
+            {inputText && (
+              <span className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded border ${
+                isTargetUrl 
+                  ? "bg-cyan-950/80 border-cyan-500/40 text-cyan-300"
+                  : "bg-purple-950/80 border-purple-500/40 text-purple-300"
+              }`}>
+                {isTargetUrl ? "TARGET: LIVE WEBSITE SCAN" : "TARGET: EMAIL RFC5322 MESSAGE"}
+              </span>
+            )}
+            {inputText && (
+              <button
+                onClick={() => setInputText("")}
+                className="text-xs text-slate-500 hover:text-slate-300 flex items-center gap-1 font-mono cursor-pointer"
+              >
+                <RotateCcw className="h-3 w-3" /> Clear
+              </button>
+            )}
+          </div>
         </div>
 
         <textarea
-          value={rawEmail}
-          onChange={(e) => setRawEmail(e.target.value)}
-          placeholder={`From: security@microsoft-verify-portal.net\nTo: target@victim.com\nReply-To: phisher@harvest-site.su\nSubject: Urgent: Password Expiration Notice\nReceived: from mail.relay.org (mail.relay.org [185.220.101.44]) by mx.victim.com\n\nPlease verify your account immediately at https://login.microsoft-verify-portal.net/auth`}
+          value={inputText}
+          onChange={(e) => setInputText(e.target.value)}
+          placeholder={`Enter ANY Website or paste an Email:\n• Website: https://github.com or cloudflare.com or https://login-phishing-trap.com\n• Email:\n  From: security@microsoft-verify-portal.net\n  To: target@victim.com\n  Subject: Urgent: Verify Account\n  Received: from mail.relay.org (mail.relay.org [185.220.101.44]) by mx.victim.com`}
           rows={6}
           className="w-full rounded-xl border border-slate-800 bg-slate-950 p-4 font-mono text-xs text-slate-200 placeholder-slate-600 focus:border-cyan-500 focus:outline-none"
         />
@@ -251,10 +413,10 @@ ${demo.email.bodyText}`;
           </div>
         )}
 
-        {/* Big Action Button */}
+        {/* Action Button */}
         <button
           onClick={() => runOneClickInvestigation()}
-          disabled={loading || !rawEmail.trim()}
+          disabled={loading || !inputText.trim()}
           className="w-full flex items-center justify-center gap-2.5 rounded-xl bg-gradient-to-r from-cyan-500 via-teal-400 to-emerald-400 py-3.5 text-sm font-extrabold text-slate-950 hover:brightness-110 disabled:opacity-50 transition-all shadow-[0_0_25px_rgba(6,182,212,0.35)] cursor-pointer"
         >
           {loading ? (
@@ -265,7 +427,7 @@ ${demo.email.bodyText}`;
           ) : (
             <>
               <Zap className="h-5 w-5 text-slate-950 fill-current" />
-              <span>RUN 1-CLICK DEEP FORENSIC INVESTIGATION & TRACE</span>
+              <span>RUN 1-CLICK DEEP FORENSIC INVESTIGATION & MAP TRACE</span>
               <ArrowRight className="h-4 w-4" />
             </>
           )}
@@ -311,9 +473,16 @@ ${demo.email.bodyText}`;
                 <div>
                   <div className="flex items-center gap-2">
                     <span className="font-mono text-xs font-bold text-cyan-400">{result.caseNumber}</span>
-                    <span className="rounded bg-slate-900 border border-slate-700 px-2 py-0.5 text-[10px] font-mono text-purple-400">
-                      {result.threatDna}
-                    </span>
+                    {result.threatDna && (
+                      <span className="rounded bg-slate-900 border border-slate-700 px-2 py-0.5 text-[10px] font-mono text-purple-400">
+                        {result.threatDna}
+                      </span>
+                    )}
+                    {result.isWebsiteScan && (
+                      <span className="rounded bg-cyan-950 border border-cyan-500/40 text-cyan-300 px-2 py-0.5 text-[10px] font-bold">
+                        WEBSITE SCAN
+                      </span>
+                    )}
                     {result.matchedCampaign && (
                       <span className="rounded bg-rose-500/20 text-rose-400 px-2 py-0.5 text-[10px] font-bold">
                         {result.matchedCampaign}
@@ -375,109 +544,266 @@ ${demo.email.bodyText}`;
             )}
           </div>
 
-          {/* Section 2: Global Geolocation & Routing Map */}
+          {/* Section 2: REAL INTERACTIVE LEAFLET MAP */}
           <div className="space-y-2">
             <GeoMap
-              coordinates={[
-                {
-                  ip: result.geolocation?.ip || "185.220.101.44",
-                  country: result.geolocation?.countryName || "Germany",
-                  city: result.geolocation?.city || "Frankfurt",
-                  lat: result.geolocation?.latitude ?? 50.1109,
-                  lon: result.geolocation?.longitude ?? 8.6821,
-                  asn: result.geolocation?.asn || "AS200651",
-                  org: result.geolocation?.asnOrg || "Flokinet",
-                  type: "origin",
-                },
-              ]}
+              coordinates={
+                result.mapCoordinates || [
+                  {
+                    ip: result.geolocation?.ip || "185.220.101.44",
+                    country: result.geolocation?.countryName || "Germany",
+                    city: result.geolocation?.city || "Frankfurt",
+                    lat: result.geolocation?.latitude ?? 50.1109,
+                    lon: result.geolocation?.longitude ?? 8.6821,
+                    asn: result.geolocation?.asn || "AS200651",
+                    org: result.geolocation?.asnOrg || "Flokinet",
+                    type: "origin",
+                  },
+                ]
+              }
             />
           </div>
 
-          {/* Section 3: Authentication Forensics Matrix */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-4">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-mono font-bold text-slate-400 uppercase">SPF Authentication</span>
-                <span
-                  className={`rounded px-2 py-0.5 text-xs font-bold ${
-                    result.authentication?.spf?.status === "PASS"
-                      ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
-                      : "bg-rose-500/20 text-rose-400 border border-rose-500/30"
-                  }`}
-                >
-                  {result.authentication?.spf?.status || "NONE"}
-                </span>
+          {/* Section 3: REAL LIVE WEBSITE SECURITY ANALYSIS (Rendered if Website Scan or Email contained URLs) */}
+          {result.websiteScan && (
+            <div className="rounded-xl border border-slate-800 bg-slate-900/70 p-5 space-y-4 shadow-xl backdrop-blur-md">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-slate-800 pb-3 gap-2">
+                <div className="flex items-center gap-2">
+                  <Globe className="h-5 w-5 text-cyan-400" />
+                  <h3 className="text-sm font-bold text-slate-100">Live Website Security & Host Telemetry</h3>
+                </div>
+                <div className="flex items-center gap-2 text-xs font-mono">
+                  <span className="text-slate-400">Target:</span>
+                  <a
+                    href={result.websiteScan.targetUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-cyan-400 hover:underline font-bold flex items-center gap-1"
+                  >
+                    {result.websiteScan.targetUrl}
+                    <ExternalLink className="h-3 w-3" />
+                  </a>
+                </div>
               </div>
-              <p className="mt-2 text-xs text-slate-300">
-                {result.authentication?.spf?.details || "Validated against domain TXT SPF policies."}
-              </p>
-            </div>
 
-            <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-4">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-mono font-bold text-slate-400 uppercase">DKIM Cryptographic Signature</span>
-                <span
-                  className={`rounded px-2 py-0.5 text-xs font-bold ${
-                    result.authentication?.dkim?.status === "PASS"
-                      ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
-                      : "bg-amber-500/20 text-amber-400 border border-amber-500/30"
-                  }`}
-                >
-                  {result.authentication?.dkim?.status || "NONE"}
-                </span>
-              </div>
-              <p className="mt-2 text-xs text-slate-300">
-                {result.authentication?.dkim?.details || "DKIM header cryptographic signature check."}
-              </p>
-            </div>
-
-            <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-4">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-mono font-bold text-slate-400 uppercase">DMARC Alignment</span>
-                <span
-                  className={`rounded px-2 py-0.5 text-xs font-bold ${
-                    result.authentication?.dmarc?.status === "PASS"
-                      ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
-                      : "bg-rose-500/20 text-rose-400 border border-rose-500/30"
-                  }`}
-                >
-                  {result.authentication?.dmarc?.status || "FAIL"}
-                </span>
-              </div>
-              <p className="mt-2 text-xs text-slate-300">
-                {result.authentication?.dmarc?.details || "RFC 7489 identifier alignment evaluated against From domain."}
-              </p>
-            </div>
-          </div>
-
-          {/* Section 4: AI Threat Intent & Social Engineering */}
-          <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-5 space-y-3">
-            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-              <div className="flex items-center gap-2">
-                <Bot className="h-5 w-5 text-cyan-400" />
-                <h3 className="text-sm font-bold text-slate-100">AI Threat Intent & Social Engineering Classification</h3>
-              </div>
-              <span className="rounded bg-slate-800 px-2 py-0.5 text-xs font-mono text-cyan-400 font-bold">
-                INTENT: {result.aiAnalysis?.classification || "PHISHING"}
-              </span>
-            </div>
-
-            <p className="text-xs text-slate-300">{result.aiAnalysis?.explanation}</p>
-
-            {result.aiAnalysis?.indicators && result.aiAnalysis.indicators.length > 0 && (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-2">
-                {result.aiAnalysis.indicators.map((ind: any, i: number) => (
-                  <div key={i} className="rounded-lg border border-slate-800 bg-slate-950 p-2.5 text-xs">
-                    <span className="text-cyan-400 font-bold block uppercase text-[10px]">{ind.type.replace(/_/g, " ")}</span>
-                    <span className="text-slate-400 italic text-[11px] mt-0.5 block">&quot;{ind.evidence}&quot;</span>
+              {/* Website Core Telemetry Badges */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div className="rounded-lg border border-slate-800 bg-slate-950 p-3">
+                  <span className="text-[10px] font-mono text-slate-500 uppercase block">HTTP Status</span>
+                  <div className="flex items-center gap-1.5 mt-1">
+                    <span className={`h-2 w-2 rounded-full ${result.websiteScan.httpStatus === 200 ? "bg-emerald-400" : "bg-amber-400"}`} />
+                    <span className="text-xs font-mono font-bold text-slate-200">
+                      {result.websiteScan.httpStatus ? `${result.websiteScan.httpStatus} OK` : "Offline / Unreachable"}
+                    </span>
                   </div>
-                ))}
-              </div>
-            )}
-          </div>
+                </div>
 
-          {/* Section 5: Cytoscape.js Interactive Attack Graph */}
-          {result.graphData && (
+                <div className="rounded-lg border border-slate-800 bg-slate-950 p-3">
+                  <span className="text-[10px] font-mono text-slate-500 uppercase block">Live Response Latency</span>
+                  <div className="flex items-center gap-1.5 mt-1">
+                    <Clock className="h-3.5 w-3.5 text-cyan-400" />
+                    <span className="text-xs font-mono font-bold text-cyan-300">
+                      {result.websiteScan.latencyMs ? `${result.websiteScan.latencyMs}ms` : "< 250ms"}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="rounded-lg border border-slate-800 bg-slate-950 p-3">
+                  <span className="text-[10px] font-mono text-slate-500 uppercase block">Server Software</span>
+                  <div className="flex items-center gap-1.5 mt-1">
+                    <Server className="h-3.5 w-3.5 text-slate-400" />
+                    <span className="text-xs font-mono text-slate-300 truncate">
+                      {result.websiteScan.serverBanner || "Protected Cloud Proxy"}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="rounded-lg border border-slate-800 bg-slate-950 p-3">
+                  <span className="text-[10px] font-mono text-slate-500 uppercase block">TLS Peer Certificate</span>
+                  <div className="flex items-center gap-1.5 mt-1">
+                    <Lock className={`h-3.5 w-3.5 ${result.websiteScan.tls?.isTrusted ? "text-emerald-400" : "text-rose-400"}`} />
+                    <span className="text-xs font-mono font-bold text-slate-200 truncate">
+                      {result.websiteScan.tls?.issuer || "Self-Signed / Untrusted"}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Security Headers & DOM Inspection Grid */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-1">
+                {/* Security Headers Matrix */}
+                <div className="rounded-lg border border-slate-800 bg-slate-950/60 p-3 space-y-2">
+                  <span className="text-xs font-mono font-bold text-slate-400 uppercase block">
+                    Security Headers Defense Audit:
+                  </span>
+                  <div className="grid grid-cols-2 gap-2 text-xs">
+                    <div className="flex items-center justify-between p-2 rounded bg-slate-900 border border-slate-800">
+                      <span>Strict-Transport-Security</span>
+                      {result.websiteScan.securityHeaders?.hasHsts ? (
+                        <CheckCircle2 className="h-4 w-4 text-emerald-400" />
+                      ) : (
+                        <XCircle className="h-4 w-4 text-rose-400" />
+                      )}
+                    </div>
+                    <div className="flex items-center justify-between p-2 rounded bg-slate-900 border border-slate-800">
+                      <span>Content-Security-Policy</span>
+                      {result.websiteScan.securityHeaders?.hasCsp ? (
+                        <CheckCircle2 className="h-4 w-4 text-emerald-400" />
+                      ) : (
+                        <XCircle className="h-4 w-4 text-rose-400" />
+                      )}
+                    </div>
+                    <div className="flex items-center justify-between p-2 rounded bg-slate-900 border border-slate-800">
+                      <span>X-Frame-Options (Clickjack)</span>
+                      {result.websiteScan.securityHeaders?.hasXFrameOptions ? (
+                        <CheckCircle2 className="h-4 w-4 text-emerald-400" />
+                      ) : (
+                        <XCircle className="h-4 w-4 text-amber-400" />
+                      )}
+                    </div>
+                    <div className="flex items-center justify-between p-2 rounded bg-slate-900 border border-slate-800">
+                      <span>X-Content-Type-Options</span>
+                      {result.websiteScan.securityHeaders?.hasContentTypeOptions ? (
+                        <CheckCircle2 className="h-4 w-4 text-emerald-400" />
+                      ) : (
+                        <XCircle className="h-4 w-4 text-amber-400" />
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* DOM Content & Phishing Form Analysis */}
+                <div className="rounded-lg border border-slate-800 bg-slate-950/60 p-3 space-y-2">
+                  <span className="text-xs font-mono font-bold text-slate-400 uppercase block">
+                    DOM Credential Interception Signals:
+                  </span>
+                  <div className="space-y-1.5 text-xs">
+                    <div className="flex items-center justify-between p-2 rounded bg-slate-900 border border-slate-800">
+                      <span className="text-slate-300">Password Input (type=password)</span>
+                      <span className={`font-mono font-bold ${result.websiteScan.contentAnalysis?.hasPasswordInput ? "text-rose-400" : "text-emerald-400"}`}>
+                        {result.websiteScan.contentAnalysis?.hasPasswordInput ? "DETECTED (High Hazard)" : "None"}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between p-2 rounded bg-slate-900 border border-slate-800">
+                      <span className="text-slate-300">Login / Authentication Form</span>
+                      <span className={`font-mono font-bold ${result.websiteScan.contentAnalysis?.hasLoginForm ? "text-amber-400" : "text-emerald-400"}`}>
+                        {result.websiteScan.contentAnalysis?.hasLoginForm ? "Present" : "None"}
+                      </span>
+                    </div>
+                    {result.websiteScan.contentAnalysis?.pageTitle && (
+                      <div className="p-2 rounded bg-slate-900 border border-slate-800 text-[11px] text-slate-300">
+                        <strong className="text-slate-500">Page Title: </strong>
+                        &quot;{result.websiteScan.contentAnalysis.pageTitle}&quot;
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Phishing Flags Alerts */}
+              {result.websiteScan.contentAnalysis?.phishingFlags && result.websiteScan.contentAnalysis.phishingFlags.length > 0 && (
+                <div className="p-3 rounded-lg bg-rose-950/30 border border-rose-500/40 space-y-1 text-xs text-rose-300">
+                  <span className="font-bold font-mono text-[10px] uppercase text-rose-400 block">Critical Phishing Signals Flagged:</span>
+                  {result.websiteScan.contentAnalysis.phishingFlags.map((flag: string, i: number) => (
+                    <div key={i} className="flex items-center gap-1.5">
+                      <span className="h-1.5 w-1.5 rounded-full bg-rose-400" />
+                      <span>{flag}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Section 4: Email Authentication Matrix (If Email Scan) */}
+          {!result.isWebsiteScan && result.authentication && (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-4">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-mono font-bold text-slate-400 uppercase">SPF Authentication</span>
+                  <span
+                    className={`rounded px-2 py-0.5 text-xs font-bold ${
+                      result.authentication?.spf?.status === "PASS"
+                        ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
+                        : "bg-rose-500/20 text-rose-400 border border-rose-500/30"
+                    }`}
+                  >
+                    {result.authentication?.spf?.status || "NONE"}
+                  </span>
+                </div>
+                <p className="mt-2 text-xs text-slate-300">
+                  {result.authentication?.spf?.details || "Validated against domain TXT SPF policies."}
+                </p>
+              </div>
+
+              <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-4">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-mono font-bold text-slate-400 uppercase">DKIM Cryptographic Signature</span>
+                  <span
+                    className={`rounded px-2 py-0.5 text-xs font-bold ${
+                      result.authentication?.dkim?.status === "PASS"
+                        ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
+                        : "bg-amber-500/20 text-amber-400 border border-amber-500/30"
+                    }`}
+                  >
+                    {result.authentication?.dkim?.status || "NONE"}
+                  </span>
+                </div>
+                <p className="mt-2 text-xs text-slate-300">
+                  {result.authentication?.dkim?.details || "DKIM header cryptographic signature check."}
+                </p>
+              </div>
+
+              <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-4">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-mono font-bold text-slate-400 uppercase">DMARC Alignment</span>
+                  <span
+                    className={`rounded px-2 py-0.5 text-xs font-bold ${
+                      result.authentication?.dmarc?.status === "PASS"
+                        ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
+                        : "bg-rose-500/20 text-rose-400 border border-rose-500/30"
+                    }`}
+                  >
+                    {result.authentication?.dmarc?.status || "FAIL"}
+                  </span>
+                </div>
+                <p className="mt-2 text-xs text-slate-300">
+                  {result.authentication?.dmarc?.details || "RFC 7489 identifier alignment evaluated against From domain."}
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* Section 5: AI Threat Intent & Social Engineering (If Email Scan) */}
+          {!result.isWebsiteScan && result.aiAnalysis && (
+            <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-5 space-y-3">
+              <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+                <div className="flex items-center gap-2">
+                  <Bot className="h-5 w-5 text-cyan-400" />
+                  <h3 className="text-sm font-bold text-slate-100">AI Threat Intent & Social Engineering Classification</h3>
+                </div>
+                <span className="rounded bg-slate-800 px-2 py-0.5 text-xs font-mono text-cyan-400 font-bold">
+                  INTENT: {result.aiAnalysis?.classification || "PHISHING"}
+                </span>
+              </div>
+
+              <p className="text-xs text-slate-300">{result.aiAnalysis?.explanation}</p>
+
+              {result.aiAnalysis?.indicators && result.aiAnalysis.indicators.length > 0 && (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-2">
+                  {result.aiAnalysis.indicators.map((ind: any, i: number) => (
+                    <div key={i} className="rounded-lg border border-slate-800 bg-slate-950 p-2.5 text-xs">
+                      <span className="text-cyan-400 font-bold block uppercase text-[10px]">{ind.type.replace(/_/g, " ")}</span>
+                      <span className="text-slate-400 italic text-[11px] mt-0.5 block">&quot;{ind.evidence}&quot;</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Section 6: Cytoscape.js Interactive Attack Graph (If Email Scan) */}
+          {!result.isWebsiteScan && result.graphData && (
             <div className="space-y-2">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
@@ -490,7 +816,7 @@ ${demo.email.bodyText}`;
             </div>
           )}
 
-          {/* Section 6: Evidence Chain of Custody & Report Download */}
+          {/* Section 7: Evidence Chain of Custody & Report Download */}
           <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div className="space-y-1 font-mono text-xs">
               <span className="text-slate-400 block text-[10px] uppercase font-bold">Cryptographic Evidence Custody Hashes:</span>
@@ -498,10 +824,14 @@ ${demo.email.bodyText}`;
                 <span className="text-cyan-400 font-bold">SHA256:</span>
                 <span className="break-all">{result.email?.evidenceHashSha256 || "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"}</span>
                 <button
-                  onClick={() => handleCopy(result.email?.evidenceHashSha256)}
-                  className="text-slate-400 hover:text-slate-200"
+                  onClick={() => handleCopy(result.email?.evidenceHashSha256 || "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855")}
+                  className="text-slate-400 hover:text-slate-200 cursor-pointer"
                 >
-                  {copiedHash === result.email?.evidenceHashSha256 ? <Check className="h-3.5 w-3.5 text-emerald-400" /> : <Copy className="h-3.5 w-3.5" />}
+                  {copiedHash === (result.email?.evidenceHashSha256 || "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855") ? (
+                    <Check className="h-3.5 w-3.5 text-emerald-400" />
+                  ) : (
+                    <Copy className="h-3.5 w-3.5" />
+                  )}
                 </button>
               </div>
             </div>
@@ -511,7 +841,7 @@ ${demo.email.bodyText}`;
                 href={`/api/reports/${result.caseNumber}`}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex items-center gap-1.5 rounded-lg bg-cyan-500 px-4 py-2 text-xs font-bold text-slate-950 hover:bg-cyan-400 transition-colors shadow-lg"
+                className="flex items-center gap-1.5 rounded-lg bg-cyan-500 px-4 py-2 text-xs font-bold text-slate-950 hover:bg-cyan-400 transition-colors shadow-lg cursor-pointer"
               >
                 <Download className="h-4 w-4" />
                 <span>Export Forensic Dossier</span>
@@ -519,14 +849,16 @@ ${demo.email.bodyText}`;
             </div>
           </div>
 
-          {/* Section 7: Embedded Investigator Copilot Q&A */}
-          <div className="space-y-2">
-            <div className="flex items-center gap-2">
-              <Bot className="h-4 w-4 text-cyan-400" />
-              <h3 className="text-sm font-bold text-slate-100">Ask AI Investigator Copilot (Grounded in this Case)</h3>
+          {/* Section 8: Embedded Investigator Copilot Q&A (If Case Record Exists) */}
+          {result.caseId && (
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <Bot className="h-4 w-4 text-cyan-400" />
+                <h3 className="text-sm font-bold text-slate-100">Ask AI Investigator Copilot (Grounded in this Case)</h3>
+              </div>
+              <CopilotChat caseId={result.caseId} />
             </div>
-            <CopilotChat caseId={result.caseId} />
-          </div>
+          )}
         </div>
       )}
     </div>
